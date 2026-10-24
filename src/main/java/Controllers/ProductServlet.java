@@ -1,0 +1,237 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/JSP_Servlet/Servlet.java to edit this template
+ */
+package Controllers;
+
+import DAOs.ProductDAO;
+import Models.Product;
+import java.io.IOException;
+import java.io.PrintWriter;
+
+import java.io.File;
+import java.nio.file.Paths;
+import java.util.List;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
+
+/**
+ *
+ * @author Phat
+ */
+@MultipartConfig
+public class ProductServlet extends HttpServlet {
+
+    // <editor-fold defaultstate="collapsed" desc="HttpServlet methods. Click on the + sign on the left to edit the code.">
+    /**
+     * Handles the HTTP <code>GET</code> method.
+     *
+     * @param request servlet request
+     * @param response servlet response
+     * @throws ServletException if a servlet-specific error occurs
+     * @throws IOException if an I/O error occurs
+     */
+    @Override
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        PrintWriter out = response.getWriter();
+        ProductDAO dao = new ProductDAO();
+        String action = request.getParameter("action");
+        if (action == null) {
+            action = "list";
+        }
+        switch (action) {
+            case "create":
+                request.getRequestDispatcher("createProduct.jsp").forward(request, response);
+                break;
+            case "add":
+                request.getRequestDispatcher("addProduct.jsp").forward(request, response);
+                break;
+            case "update": {
+                String idStr = request.getParameter("id");
+                int id;
+                Product product;
+                try {
+                    id = Integer.parseInt(idStr);
+                    product = dao.getById(id);
+                    request.setAttribute("object", product);
+                    request.getRequestDispatcher("updateProduct.jsp").forward(request, response);
+                } catch (ServletException | IOException | NumberFormatException e) {
+                    out.println("Error at get id for update: " + e.getMessage());
+                }
+                break;
+            }
+            case "delete": {
+                String idStr = request.getParameter("id");
+                int id;
+                Product product;
+                try {
+                    id = Integer.parseInt(idStr);
+                    product = dao.getById(id);
+                    request.setAttribute("object", product);
+                    request.getRequestDispatcher("deleteProduct.jsp").forward(request, response);
+
+                } catch (NumberFormatException e) {
+                    out.println("Error at get id for delete: " + e.getMessage());
+                }
+                break;
+            }
+            default:
+                List<Product> products = dao.getAll();
+                request.setAttribute("data", products);
+                request.getRequestDispatcher("products.jsp").forward(request, response);
+                break;
+        }
+    }
+
+    /**
+     * Handles the HTTP <code>POST</code> method.
+     *
+     * @param request servlet request
+     * @param response servlet response
+     * @throws ServletException if a servlet-specific error occurs
+     * @throws IOException if an I/O error occurs
+     */
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        ProductDAO dao = new ProductDAO();
+        PrintWriter out = response.getWriter();
+
+        String action = request.getParameter("action");
+        if (action == null) {
+            doGet(request, response);
+            return;
+        }
+
+        switch (action) {
+            case "create":
+                try {
+                String name = request.getParameter("name");
+                if (dao.getByName(name) != null) {
+                    request.setAttribute("err", "Create failed. Product name have already existed");
+                    doGet(request, response);
+                    return;
+                }
+                String description = request.getParameter("description");
+                long price = Integer.parseInt(request.getParameter("price"));
+                int quantity = Integer.parseInt(request.getParameter("quantity"));
+                String uploadDir = getServletContext().getRealPath("resources/image/productImage");
+                File uploadFolder = new File(uploadDir);
+                if (!uploadFolder.exists()) {
+                    uploadFolder.mkdirs();
+                }
+                Part filePart = request.getPart("image");
+                String fileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString();
+                String filePath = uploadDir + File.separator + fileName;
+                filePart.write(filePath);
+                String image = fileName;
+
+                int typeId = Integer.parseInt(request.getParameter("typeId"));
+                if (dao.insert(name, description, price, quantity, image, typeId) == 1) {
+                    response.sendRedirect("Product");
+                } else {
+                    request.setAttribute("err", "Create failed");
+                    doGet(request, response);
+                }
+            } catch (IOException | NumberFormatException e) {
+                out.println("Error at Insert new object: " + e.getMessage());
+            }
+            break;
+            case "add":
+                try {
+                int id = Integer.parseInt(request.getParameter("id"));
+                int quantity = Integer.parseInt(request.getParameter("quantity"));
+
+                if (dao.update(id, quantity) == 1) {
+                    response.sendRedirect("Product");
+                } else {
+                    request.setAttribute("err", "Add failed.");
+                    doGet(request, response);
+                }
+            } catch (ServletException | IOException | NumberFormatException e) {
+                out.println("Error at update object: " + e.getMessage());
+            }
+            break;
+            case "update":
+                try {
+                int id = Integer.parseInt(request.getParameter("id"));
+                String name = request.getParameter("name");
+                Product pro = dao.getByName(name);
+                if (pro == null || pro.getId() == id) {
+                } else {
+                    request.setAttribute("err", "Update failed. Product name have already existed");
+                    doGet(request, response);
+                    return;
+                }
+                String description = request.getParameter("description");
+                long price = Long.parseLong(request.getParameter("price"));
+                int quantity = Integer.parseInt(request.getParameter("quantity"));
+                String image = request.getParameter("oldImage");
+                Part filePart = request.getPart("newImage");
+                if (filePart != null && filePart.getSize() > 0) {
+                    if (image != null) {
+                        String fullOldPath = getServletContext().getRealPath(image);
+                        File oldFile = new File(fullOldPath);
+                        if (oldFile.exists()) {
+                            oldFile.delete();
+                        }
+                    }
+                    String fileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString();
+                    String uploadDir = getServletContext().getRealPath("resources/image/productImage");
+                    filePart.write(uploadDir + File.separator + fileName);
+                    image = fileName;
+                }
+                int typeId = Integer.parseInt(request.getParameter("typeId"));
+                if (dao.update(id, name, description, price, quantity, image, typeId) == 1) {
+                    response.sendRedirect("Product");
+                } else {
+                    request.setAttribute("err", "Update failed.");
+                    doGet(request, response);
+                }
+            } catch (ServletException | IOException | NumberFormatException e) {
+                out.println("Error at update object: " + e.getMessage());
+            }
+            break;
+            case "delete":
+                try {
+                int id = Integer.parseInt(request.getParameter("id"));
+                String path = request.getParameter("image");
+                if (path != null) {
+                    String fullPath = getServletContext().getRealPath("resources/image/productImage/" + path);
+                    File file = new File(fullPath);
+                    if (file.exists()) {
+                        file.delete();
+                    }
+                }
+                if (dao.delete(id) == 1) {
+                    response.sendRedirect("Product");
+                } else {
+                    request.setAttribute("err", "Delete failed");
+                    doGet(request, response);
+                }
+            } catch (ServletException | IOException | NumberFormatException e) {
+                out.println("Error at delete object: " + e.getMessage());
+            }
+            break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Returns a short description of the servlet.
+     *
+     * @return a String containing servlet description
+     */
+    @Override
+    public String getServletInfo() {
+        return "Short description";
+    }
+// </editor-fold>
+
+}
